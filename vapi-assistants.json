@@ -1,0 +1,225 @@
+{
+  "_readme": "TEMPLATES. Create two assistants in Vapi (dashboard or POST https://api.vapi.ai/assistant) from the two objects below. Replace YOUR-N8N-DOMAIN, the secret and the voice ID. Provider and field names can change: if the API rejects a field, copy the prompt and tool schemas into the dashboard instead.",
+  "receptionist": {
+    "name": "Receptionist (inbound)",
+    "firstMessage": "Hi, thanks for calling Bright Smile Dental. This is Mia, the virtual assistant. How can I help you today?",
+    "model": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "temperature": 0.3,
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Mia, the virtual receptionist for Bright Smile Dental. You answer phone calls, answer basic questions and book appointments.\n\nTODAY: {{\"now\" | date: \"%A, %B %d, %Y\", \"America/New_York\"}}\n\nSTYLE\n- This is a phone call: short sentences, one question at a time, friendly and calm.\n- Never read long lists. Offer at most 3 times.\n- If asked, say you are an AI virtual assistant.\n\nBUSINESS INFO (edit this)\n- Open Monday to Friday, 9 AM to 5 PM. Closed weekends.\n- Services: check-up, cleaning, whitening, consultation.\n- Address: 123 Main Street. Phone: 555-0100.\n\nBOOKING FLOW\n1. Ask which service they need.\n2. Ask for the preferred date. Convert words like tomorrow or next Monday into YYYY-MM-DD using TODAY.\n3. Call check_availability with that date. Offer up to 3 of the returned times.\n4. Ask for the caller's full name.\n5. Call book_appointment with name, service, date (YYYY-MM-DD) and time (like 10:00 AM). Phone is optional: the caller's number is used automatically.\n6. Read back the confirmation from the tool result, then ask if they need anything else.\n\nRULES\n- Only state availability, prices or confirmations that come from tool results or the business info above. Never guess.\n- If a tool says a time is unavailable, offer other times.\n- If the caller is upset, has an emergency, asks for a human, or asks something you cannot answer: apologise, take their name and number, and say a team member will call them back. Do not argue.\n- Never ask for card numbers, passwords or medical details."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "check_availability",
+            "description": "Get free appointment times for one date.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "description": "Date in YYYY-MM-DD format"
+                }
+              },
+              "required": [
+                "date"
+              ]
+            }
+          },
+          "server": {
+            "url": "https://YOUR-N8N-DOMAIN/webhook/vapi-voice",
+            "secret": "YOUR_LONG_RANDOM_SECRET"
+          },
+          "messages": [
+            {
+              "type": "request-start",
+              "content": "One moment, let me check that for you."
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "book_appointment",
+            "description": "Book an appointment after the caller has chosen a free time.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "Caller's full name"
+                },
+                "service": {
+                  "type": "string",
+                  "description": "Service requested"
+                },
+                "date": {
+                  "type": "string",
+                  "description": "Date in YYYY-MM-DD format"
+                },
+                "time": {
+                  "type": "string",
+                  "description": "Start time, for example 10:00 AM"
+                },
+                "phone": {
+                  "type": "string",
+                  "description": "Optional phone number in international format"
+                }
+              },
+              "required": [
+                "name",
+                "service",
+                "date",
+                "time"
+              ]
+            }
+          },
+          "server": {
+            "url": "https://YOUR-N8N-DOMAIN/webhook/vapi-voice",
+            "secret": "YOUR_LONG_RANDOM_SECRET"
+          },
+          "messages": [
+            {
+              "type": "request-start",
+              "content": "One moment, let me check that for you."
+            }
+          ]
+        },
+        {
+          "type": "function",
+          "function": {
+            "name": "update_appointment",
+            "description": "Confirm or cancel an existing booking.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "booking_id": {
+                  "type": "string"
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "confirm",
+                    "cancel"
+                  ]
+                }
+              },
+              "required": [
+                "booking_id",
+                "action"
+              ]
+            }
+          },
+          "server": {
+            "url": "https://YOUR-N8N-DOMAIN/webhook/vapi-voice",
+            "secret": "YOUR_LONG_RANDOM_SECRET"
+          },
+          "messages": [
+            {
+              "type": "request-start",
+              "content": "One moment, let me check that for you."
+            }
+          ]
+        }
+      ]
+    },
+    "voice": {
+      "provider": "11labs",
+      "voiceId": "YOUR_ELEVENLABS_VOICE_ID"
+    },
+    "transcriber": {
+      "provider": "deepgram",
+      "model": "nova-3",
+      "language": "en"
+    },
+    "server": {
+      "url": "https://YOUR-N8N-DOMAIN/webhook/vapi-voice",
+      "secret": "YOUR_LONG_RANDOM_SECRET"
+    },
+    "serverMessages": [
+      "end-of-call-report",
+      "tool-calls"
+    ],
+    "maxDurationSeconds": 600,
+    "endCallMessage": "Thank you for calling. Goodbye!"
+  },
+  "reminder": {
+    "name": "Reminder (outbound)",
+    "firstMessage": "Hi, this is Mia, the virtual assistant from {{businessName}}. Am I speaking with {{customerName}}?",
+    "model": {
+      "provider": "openai",
+      "model": "gpt-4o-mini",
+      "temperature": 0.3,
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are Mia, the virtual assistant of {{businessName}}, calling to remind a customer about an appointment.\n\nCUSTOMER: {{customerName}}\nAPPOINTMENT: {{service}} on {{appointmentTime}}\nBOOKING ID: {{bookingId}}\n\nFLOW\n1. Confirm you are speaking with {{customerName}}. If not, apologise and end the call politely.\n2. Remind them of the appointment and ask: will you be able to make it?\n3. If yes: call update_appointment with booking_id {{bookingId}} and action confirm. Thank them.\n4. If no: call update_appointment with booking_id {{bookingId}} and action cancel. Tell them they can call back any time to book a new time.\n5. If they are unsure, do not change anything. Say the team will follow up.\n\nSTYLE: short sentences, friendly, one question at a time. If asked, say you are an AI virtual assistant. Never ask for payment or personal details."
+        }
+      ],
+      "tools": [
+        {
+          "type": "function",
+          "function": {
+            "name": "update_appointment",
+            "description": "Confirm or cancel the booking the customer is being reminded about.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "booking_id": {
+                  "type": "string",
+                  "description": "Use the BOOKING ID given in the instructions"
+                },
+                "action": {
+                  "type": "string",
+                  "enum": [
+                    "confirm",
+                    "cancel"
+                  ]
+                }
+              },
+              "required": [
+                "booking_id",
+                "action"
+              ]
+            }
+          },
+          "server": {
+            "url": "https://YOUR-N8N-DOMAIN/webhook/vapi-voice",
+            "secret": "YOUR_LONG_RANDOM_SECRET"
+          },
+          "messages": [
+            {
+              "type": "request-start",
+              "content": "One moment, let me check that for you."
+            }
+          ]
+        }
+      ]
+    },
+    "voice": {
+      "provider": "11labs",
+      "voiceId": "YOUR_ELEVENLABS_VOICE_ID"
+    },
+    "transcriber": {
+      "provider": "deepgram",
+      "model": "nova-3",
+      "language": "en"
+    },
+    "server": {
+      "url": "https://YOUR-N8N-DOMAIN/webhook/vapi-voice",
+      "secret": "YOUR_LONG_RANDOM_SECRET"
+    },
+    "serverMessages": [
+      "end-of-call-report",
+      "tool-calls"
+    ],
+    "maxDurationSeconds": 600,
+    "endCallMessage": "Thank you for calling. Goodbye!"
+  }
+}

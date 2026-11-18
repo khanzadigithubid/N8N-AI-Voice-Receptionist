@@ -1,0 +1,1961 @@
+{
+  "name": "AI Voice Receptionist (Vapi + n8n)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vapi-voice",
+        "authentication": "headerAuth",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d4e5f6a7-0001-4000-8000-000000000001",
+      "name": "Vapi Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Vapi Server Secret (X-Vapi-Secret)"
+        }
+      },
+      "webhookId": "vapi-voice-webhook"
+    },
+    {
+      "parameters": {},
+      "id": "d4e5f6a7-0002-4000-8000-000000000002",
+      "name": "Manual: Run Reminders",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        1180
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 16 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "d4e5f6a7-0003-4000-8000-000000000003",
+      "name": "Reminders 4PM (Mon-Fri)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        1380
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// EDIT: your business settings (used by every flow)\nconst cfg = {\n  business_name: 'Bright Smile Dental',\n  timezone: 'America/New_York',\n  open_hour: 9,\n  close_hour: 17,\n  slot_minutes: 60,\n  open_days: [1, 2, 3, 4, 5]   // 1 = Monday ... 7 = Sunday\n};\nreturn { json: { ...$json, cfg } };"
+      },
+      "id": "d4e5f6a7-0004-4000-8000-000000000004",
+      "name": "Business Config",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Fro0",
+              "leftValue": "={{ !!$json.body }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0005-4000-8000-000000000005",
+      "name": "From Vapi?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        460,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "s_tool-calls",
+                    "leftValue": "={{ $json.body.message.type }}",
+                    "rightValue": "tool-calls",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "tool-calls"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "s_end-of-call-report",
+                    "leftValue": "={{ $json.body.message.type }}",
+                    "rightValue": "end-of-call-report",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "end-of-call-report"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "d4e5f6a7-0006-4000-8000-000000000006",
+      "name": "Route by Message Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        680,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const msg = $json.body.message || {};\nconst tc = (msg.toolCallList && msg.toolCallList[0]) || (msg.toolCalls && msg.toolCalls[0]) || {};\nconst fn = tc.function || {};\nlet args = fn.arguments || tc.arguments || {};\nif (typeof args === 'string') { try { args = JSON.parse(args); } catch (e) { args = {}; } }\nreturn { json: {\n  toolCallId: tc.id || '',\n  toolName: fn.name || tc.name || '',\n  args,\n  callId: (msg.call && msg.call.id) || '',\n  callerNumber: (msg.call && msg.call.customer && msg.call.customer.number) || ''\n} };"
+      },
+      "id": "d4e5f6a7-0007-4000-8000-000000000007",
+      "name": "Parse Tool Call",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        940,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "s_check_availability",
+                    "leftValue": "={{ $json.toolName }}",
+                    "rightValue": "check_availability",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "check_availability"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "s_book_appointment",
+                    "leftValue": "={{ $json.toolName }}",
+                    "rightValue": "book_appointment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "book_appointment"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "s_update_appointment",
+                    "leftValue": "={{ $json.toolName }}",
+                    "rightValue": "update_appointment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "update_appointment"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "d4e5f6a7-0008-4000-8000-000000000008",
+      "name": "Which Tool?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1160,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const cfg = $('Business Config').first().json.cfg;\nconst day = DateTime.fromISO(String($json.args.date || ''), { zone: cfg.timezone });\nif (!day.isValid) {\n  const n = DateTime.now().setZone(cfg.timezone);\n  return { json: { ...$json, invalid: true, timeMin: n.toISO(), timeMax: n.plus({ hours: 1 }).toISO() } };\n}\nreturn { json: { ...$json, invalid: false, dayISO: day.toISODate(), timeMin: day.startOf('day').toISO(), timeMax: day.endOf('day').toISO() } };"
+      },
+      "id": "d4e5f6a7-0009-4000-8000-000000000009",
+      "name": "Compute Day Range",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -900
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_CALENDAR_ID"
+        },
+        "returnAll": false,
+        "limit": 50,
+        "timeMin": "={{ $json.timeMin }}",
+        "timeMax": "={{ $json.timeMax }}",
+        "options": {
+          "singleEvents": true,
+          "orderBy": "startTime"
+        }
+      },
+      "id": "d4e5f6a7-0010-4000-8000-000000000010",
+      "name": "Get Calendar Events (day)",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1660,
+        -900
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Calendar account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const cfg = $('Business Config').first().json.cfg;\nconst ctx = $('Compute Day Range').first().json;\nconst out = (result) => [{ json: { toolCallId: ctx.toolCallId, toolName: ctx.toolName, result } }];\nif (ctx.invalid) return out('I could not understand that date. Ask the caller for the date again.');\nconst zone = cfg.timezone;\nconst day = DateTime.fromISO(ctx.dayISO, { zone });\nconst label = day.toFormat('cccc, LLLL d');\nif (!cfg.open_days.includes(day.weekday)) return out('We are closed on ' + label + '. Offer another day.');\nconst busy = items.map(i => i.json).filter(e => e && e.start).map(e => ({\n  s: DateTime.fromISO(e.start.dateTime || e.start.date, { zone }),\n  e: DateTime.fromISO(e.end.dateTime || e.end.date, { zone })\n}));\nconst now = DateTime.now().setZone(zone);\nconst free = [];\nfor (let m = cfg.open_hour * 60; m + cfg.slot_minutes <= cfg.close_hour * 60; m += cfg.slot_minutes) {\n  const s = day.set({ hour: Math.floor(m / 60), minute: m % 60, second: 0, millisecond: 0 });\n  const e = s.plus({ minutes: cfg.slot_minutes });\n  if (s < now) continue;\n  if (busy.some(b => s < b.e && e > b.s)) continue;\n  free.push(s.toFormat('h:mm a'));\n}\nreturn out(free.length ? 'Available times on ' + label + ': ' + free.join(', ') + '.' : 'There is no availability on ' + label + '. Offer another date.');"
+      },
+      "id": "d4e5f6a7-0011-4000-8000-000000000011",
+      "name": "Build Free Slots",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        -900
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const cfg = $('Business Config').first().json.cfg;\nconst a = $json.args || {};\nconst zone = cfg.timezone;\nconst day = DateTime.fromISO(String(a.date || ''), { zone });\nconst raw = String(a.time || '').trim().toUpperCase();\nlet t = null;\nfor (const f of ['h:mm a', 'h a', 'h:mma', 'ha', 'H:mm', 'HH:mm']) {\n  const x = DateTime.fromFormat(raw, f, { zone });\n  if (x.isValid) { t = x; break; }\n}\nconst start = (day.isValid && t) ? day.set({ hour: t.hour, minute: t.minute, second: 0, millisecond: 0 }) : null;\nconst spoken = String(a.phone || '').replace(/[^\\d+]/g, '');\nconst phone = spoken.startsWith('+') ? spoken : ($json.callerNumber || spoken);\nconst customer_name = String(a.name || '').trim();\nconst service = String(a.service || 'Appointment').trim();\nlet error = '';\nlet end = null;\nif (!customer_name) error = 'The caller name is missing. Ask for it.';\nelse if (!start) error = 'I could not understand the date or time. Ask the caller to repeat it.';\nelse {\n  end = start.plus({ minutes: cfg.slot_minutes });\n  const closeT = day.set({ hour: cfg.close_hour, minute: 0, second: 0, millisecond: 0 });\n  if (!cfg.open_days.includes(start.weekday)) error = 'We are closed on that day. Offer another day.';\n  else if (start < DateTime.now().setZone(zone)) error = 'That time has already passed. Ask for a future time.';\n  else if (start.hour < cfg.open_hour || end > closeT) error = 'That time is outside opening hours. Offer a time between ' + cfg.open_hour + ':00 and ' + cfg.close_hour + ':00.';\n}\nreturn { json: {\n  toolCallId: $json.toolCallId, toolName: $json.toolName, callId: $json.callId,\n  valid: !error, error, customer_name, phone, service,\n  startISO: start ? start.toISO() : '', endISO: end ? end.toISO() : '',\n  whenLabel: start ? start.toFormat(\"cccc, LLLL d 'at' h:mm a\") : '',\n  booking_id: 'APT-' + Date.now().toString(36).toUpperCase()\n} };"
+      },
+      "id": "d4e5f6a7-0012-4000-8000-000000000012",
+      "name": "Prepare Booking",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Boo0",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0013-4000-8000-000000000013",
+      "name": "Booking Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1660,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return { json: { toolCallId: $json.toolCallId, toolName: $json.toolName, result: $json.error } };"
+      },
+      "id": "d4e5f6a7-0014-4000-8000-000000000014",
+      "name": "Booking Invalid Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1880,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_CALENDAR_ID"
+        },
+        "returnAll": false,
+        "limit": 10,
+        "timeMin": "={{ $json.startISO }}",
+        "timeMax": "={{ $json.endISO }}",
+        "options": {
+          "singleEvents": true
+        }
+      },
+      "id": "d4e5f6a7-0015-4000-8000-000000000015",
+      "name": "Check Slot (Calendar)",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1880,
+        -500
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Calendar account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const ctx = $('Prepare Booking').first().json;\nconst events = items.map(i => i.json).filter(e => e && e.id);\n// idempotency: if Vapi re-sends the same tool call, the event for this call already exists\nconst already = ctx.callId ? events.some(e => String(e.description || '').includes('call_id: ' + ctx.callId)) : false;\nreturn [{ json: { ...ctx, slotFree: events.length === 0, alreadyBooked: already } }];"
+      },
+      "id": "d4e5f6a7-0016-4000-8000-000000000016",
+      "name": "Evaluate Slot",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        -500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Slo0",
+              "leftValue": "={{ $json.slotFree }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0017-4000-8000-000000000017",
+      "name": "Slot Free?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2320,
+        -500
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const c = $json;\nconst result = c.alreadyBooked\n  ? 'This booking is already confirmed for ' + c.whenLabel + '. Confirm it to the caller.'\n  : 'Sorry, ' + c.whenLabel + ' is no longer available. Offer to check other times.';\nreturn { json: { toolCallId: c.toolCallId, toolName: c.toolName, result } };"
+      },
+      "id": "d4e5f6a7-0018-4000-8000-000000000018",
+      "name": "Slot Taken Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "create",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_CALENDAR_ID"
+        },
+        "start": "={{ $json.startISO }}",
+        "end": "={{ $json.endISO }}",
+        "useDefaultReminders": true,
+        "additionalFields": {
+          "summary": "={{ $json.service }} - {{ $json.customer_name }}",
+          "description": "=Booked by AI voice agent\nPhone: {{ $json.phone }}\nBooking ID: {{ $json.booking_id }}\ncall_id: {{ $json.callId }}"
+        }
+      },
+      "id": "d4e5f6a7-0019-4000-8000-000000000019",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2540,
+        -600
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Appointments",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "booking_id": "={{ $('Evaluate Slot').first().json.booking_id }}",
+            "created_at": "={{ $now.toISO() }}",
+            "customer_name": "={{ $('Evaluate Slot').first().json.customer_name }}",
+            "phone": "={{ $('Evaluate Slot').first().json.phone }}",
+            "service": "={{ $('Evaluate Slot').first().json.service }}",
+            "start": "={{ $('Evaluate Slot').first().json.startISO }}",
+            "end": "={{ $('Evaluate Slot').first().json.endISO }}",
+            "status": "booked",
+            "reminded": "no",
+            "event_id": "={{ $json.id }}",
+            "call_id": "={{ $('Evaluate Slot').first().json.callId }}"
+          },
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0020-4000-8000-000000000020",
+      "name": "Log Appointment (Sheet)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2760,
+        -600
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const c = $('Evaluate Slot').first().json;\nreturn { json: { toolCallId: c.toolCallId, toolName: c.toolName, result: 'Booked. ' + c.customer_name + ', ' + c.service + ' on ' + c.whenLabel + '. Confirm this to the caller and ask if they need anything else.' } };"
+      },
+      "id": "d4e5f6a7-0021-4000-8000-000000000021",
+      "name": "Booking Confirmation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2980,
+        -600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Appointments",
+          "mode": "name"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "booking_id",
+              "lookupValue": "={{ $json.args.booking_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0022-4000-8000-000000000022",
+      "name": "Find Booking (Sheet)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Sheets account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const ctx = $('Parse Tool Call').first().json;\nconst row = items.map(i => i.json).find(r => r && r.booking_id);\nconst action = String(ctx.args.action || '').toLowerCase();\nreturn [{ json: { toolCallId: ctx.toolCallId, toolName: ctx.toolName, found: !!row, action, row: row || null } }];"
+      },
+      "id": "d4e5f6a7-0023-4000-8000-000000000023",
+      "name": "Prepare Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1660,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Boo0",
+              "leftValue": "={{ $json.found }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0024-4000-8000-000000000024",
+      "name": "Booking Found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1880,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return { json: { toolCallId: $json.toolCallId, toolName: $json.toolName, result: 'I could not find that booking. Apologize and offer to take a message for the team.' } };"
+      },
+      "id": "d4e5f6a7-0025-4000-8000-000000000025",
+      "name": "Not Found Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Is_0",
+              "leftValue": "={{ $json.action }}",
+              "rightValue": "cancel",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0026-4000-8000-000000000026",
+      "name": "Is Cancel?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "event",
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "mode": "id",
+          "value": "YOUR_CALENDAR_ID"
+        },
+        "eventId": "={{ $json.row.event_id }}",
+        "options": {
+          "sendUpdates": "none"
+        }
+      },
+      "id": "d4e5f6a7-0027-4000-8000-000000000027",
+      "name": "Delete Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        2320,
+        -80
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Calendar account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Appointments",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "booking_id": "={{ $('Prepare Update').first().json.row.booking_id }}",
+            "status": "cancelled"
+          },
+          "matchingColumns": [
+            "booking_id"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0028-4000-8000-000000000028",
+      "name": "Mark Cancelled (Sheet)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2540,
+        -80
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const c = $('Prepare Update').first().json;\nreturn { json: { toolCallId: c.toolCallId, toolName: c.toolName, result: 'The appointment is cancelled. Tell the caller they can call back any time to book a new one.' } };"
+      },
+      "id": "d4e5f6a7-0029-4000-8000-000000000029",
+      "name": "Cancel Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2760,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Appointments",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "booking_id": "={{ $('Prepare Update').first().json.row.booking_id }}",
+            "status": "confirmed"
+          },
+          "matchingColumns": [
+            "booking_id"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0030-4000-8000-000000000030",
+      "name": "Mark Confirmed (Sheet)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2320,
+        140
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const c = $('Prepare Update').first().json;\nreturn { json: { toolCallId: c.toolCallId, toolName: c.toolName, result: 'The appointment is confirmed. Thank the caller and say we look forward to seeing them.' } };"
+      },
+      "id": "d4e5f6a7-0031-4000-8000-000000000031",
+      "name": "Confirm Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2540,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "return { json: { toolCallId: $json.toolCallId, toolName: $json.toolName, result: 'That action is not available. Apologize and offer to take a message.' } };"
+      },
+      "id": "d4e5f6a7-0032-4000-8000-000000000032",
+      "name": "Unknown Tool",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { results: [ { name: $json.toolName, toolCallId: $json.toolCallId, result: $json.result } ] } }}",
+        "options": {}
+      },
+      "id": "d4e5f6a7-0033-4000-8000-000000000033",
+      "name": "Respond to Vapi (Tool Result)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        3220,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}",
+        "options": {}
+      },
+      "id": "d4e5f6a7-0034-4000-8000-000000000034",
+      "name": "Respond OK (report)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const m = $json.body.message || {};\nconst call = m.call || {};\nconst art = m.artifact || {};\nlet dur = m.durationSeconds || (m.durationMs ? Math.round(m.durationMs / 1000) : 0);\nconst started = call.startedAt || m.startedAt;\nconst ended = call.endedAt || m.endedAt;\nif (!dur && started && ended) dur = Math.round((new Date(ended) - new Date(started)) / 1000);\nreturn { json: {\n  call_id: call.id || '',\n  time: new Date().toISOString(),\n  phone: (call.customer && call.customer.number) || '',\n  duration_sec: dur || 0,\n  ended_reason: m.endedReason || call.endedReason || '',\n  vapi_summary: m.summary || (m.analysis && m.analysis.summary) || '',\n  transcript: String(art.transcript || m.transcript || '').slice(0, 8000),\n  recording_url: art.recordingUrl || m.recordingUrl || ''\n} };"
+      },
+      "id": "d4e5f6a7-0035-4000-8000-000000000035",
+      "name": "Extract Call Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1160,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Has0",
+              "leftValue": "={{ $json.transcript.length }}",
+              "rightValue": 20,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0036-4000-8000-000000000036",
+      "name": "Has Transcript?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1380,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Transcript:\n\n{{ $json.transcript }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You analyze phone call transcripts between a caller and an AI receptionist. Output ONLY valid JSON:\n{\"intent\":\"booking|question|complaint|cancellation|other\",\"outcome\":\"booked|info_given|needs_followup|abandoned\",\"sentiment\":\"positive|neutral|negative\",\"urgent\":false,\"caller_name\":\"\",\"summary\":\"max 25 words\",\"follow_up\":\"what a human should do next, or empty string\"}\n\nRules: use ONLY facts in the transcript. urgent = true only for emergencies, angry callers or explicit requests for a human. outcome = needs_followup if the caller asked for something the AI could not complete."
+            }
+          ]
+        }
+      },
+      "id": "d4e5f6a7-0037-4000-8000-000000000037",
+      "name": "AI: Analyze Call",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        1600,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0
+        }
+      },
+      "id": "d4e5f6a7-0038-4000-8000-000000000038",
+      "name": "OpenAI Model (Analyze)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1600,
+        840
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "REPLACE_ME",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const base = $('Extract Call Data').item.json;\nlet raw = String($json.text || '').replace(/```json|```/g, '').trim();\nlet a = {};\ntry { a = JSON.parse(raw); } catch (e) { a = {}; }\nreturn { json: { ...base,\n  intent: a.intent || 'other', outcome: a.outcome || 'info_given', sentiment: a.sentiment || 'neutral',\n  urgent: a.urgent === true, caller_name: a.caller_name || '',\n  summary: a.summary || base.vapi_summary || '', follow_up: a.follow_up || '' } };"
+      },
+      "id": "d4e5f6a7-0039-4000-8000-000000000039",
+      "name": "Parse Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "appendOrUpdate",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Calls",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "call_id": "={{ $json.call_id }}",
+            "time": "={{ $json.time }}",
+            "phone": "={{ $json.phone }}",
+            "duration_sec": "={{ $json.duration_sec }}",
+            "ended_reason": "={{ $json.ended_reason }}",
+            "intent": "={{ $json.intent }}",
+            "outcome": "={{ $json.outcome }}",
+            "sentiment": "={{ $json.sentiment }}",
+            "urgent": "={{ $json.urgent }}",
+            "caller_name": "={{ $json.caller_name }}",
+            "summary": "={{ $json.summary }}",
+            "follow_up": "={{ $json.follow_up }}",
+            "recording_url": "={{ $json.recording_url }}"
+          },
+          "matchingColumns": [
+            "call_id"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0040-4000-8000-000000000040",
+      "name": "Log Call (Sheet)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2120,
+        600
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "Nee0",
+              "leftValue": "={{ $('Parse Analysis').item.json.urgent }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "Nee1",
+              "leftValue": "={{ $('Parse Analysis').item.json.outcome }}",
+              "rightValue": "needs_followup",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "Nee2",
+              "leftValue": "={{ $('Parse Analysis').item.json.sentiment }}",
+              "rightValue": "negative",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0041-4000-8000-000000000041",
+      "name": "Needs Follow-up?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2340,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "id"
+        },
+        "text": "=:telephone_receiver: *Call needs follow-up*\nCaller: {{ $('Parse Analysis').item.json.caller_name || 'unknown' }} ({{ $('Parse Analysis').item.json.phone }})\nIntent: {{ $('Parse Analysis').item.json.intent }} | Sentiment: {{ $('Parse Analysis').item.json.sentiment }} | Urgent: {{ $('Parse Analysis').item.json.urgent }}\nSummary: {{ $('Parse Analysis').item.json.summary }}\nNext step: {{ $('Parse Analysis').item.json.follow_up }}\nRecording: {{ $('Parse Analysis').item.json.recording_url }}",
+        "otherOptions": {}
+      },
+      "id": "d4e5f6a7-0042-4000-8000-000000000042",
+      "name": "Slack: Follow-up Alert",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        2560,
+        540
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_ME",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { ok: true } }}",
+        "options": {}
+      },
+      "id": "d4e5f6a7-0043-4000-8000-000000000043",
+      "name": "Respond OK (other)",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        940,
+        900
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Appointments",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0044-4000-8000-000000000044",
+      "name": "Get Appointments (Sheet)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        480,
+        1280
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Sheets account"
+        }
+      },
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const cfg = $('Business Config').first().json.cfg;\nconst tomorrow = DateTime.now().setZone(cfg.timezone).plus({ days: 1 }).toISODate();\nconst out = [];\nfor (const it of items) {\n  const r = it.json;\n  if (!r.booking_id || r.status !== 'booked' || String(r.reminded).toLowerCase() === 'yes') continue;\n  const s = DateTime.fromISO(String(r.start), { zone: cfg.timezone });\n  if (!s.isValid || s.toISODate() !== tomorrow) continue;\n  out.push({ json: { ...r, when: s.toFormat(\"cccc, LLLL d 'at' h:mm a\") } });\n}\nreturn out;"
+      },
+      "id": "d4e5f6a7-0045-4000-8000-000000000045",
+      "name": "Select Tomorrow's Bookings",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        700,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "d4e5f6a7-0046-4000-8000-000000000046",
+      "name": "Loop Over Bookings",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        920,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.vapi.ai/call",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ assistantId: 'YOUR_REMINDER_ASSISTANT_ID', phoneNumberId: 'YOUR_VAPI_PHONE_NUMBER_ID', customer: { number: String($json.phone), name: $json.customer_name }, assistantOverrides: { variableValues: { customerName: $json.customer_name, appointmentTime: $json.when, service: $json.service, bookingId: $json.booking_id, businessName: $('Business Config').first().json.cfg.business_name } } }) }}",
+        "options": {}
+      },
+      "id": "d4e5f6a7-0047-4000-8000-000000000047",
+      "name": "Vapi: Start Reminder Call",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1160,
+        1280
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "REPLACE_ME",
+          "name": "Vapi API Key (Authorization: Bearer ...)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "YOUR_GOOGLE_SHEET_ID",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Appointments",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "booking_id": "={{ $('Loop Over Bookings').item.json.booking_id }}",
+            "reminded": "yes"
+          },
+          "matchingColumns": [
+            "booking_id"
+          ],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "d4e5f6a7-0048-4000-8000-000000000048",
+      "name": "Mark Reminded (Sheet)",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1400,
+        1280
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "REPLACE_ME",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resume": "timeInterval",
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "d4e5f6a7-0049-4000-8000-000000000049",
+      "name": "Wait 30s",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1620,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## FLOW 1: Live call tools\nVapi calls this webhook DURING the call.\n- check_availability: reads Google Calendar, returns free slots\n- book_appointment: re-checks the slot, creates the event, logs it in the sheet (safe if Vapi re-sends the same call)\n- update_appointment: confirm or cancel a booking\nEvery branch answers Vapi with { results: [ { name, toolCallId, result } ] }.",
+        "height": 300,
+        "width": 600
+      },
+      "id": "d4e5f6a7-0050-4000-8000-000000000050",
+      "name": "Note: Live Tools",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        760,
+        -1000
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## FLOW 2: After every call\nVapi sends an end-of-call report -> AI extracts intent, outcome, sentiment, urgency -> logged in the 'Calls' tab (upsert on call_id) -> urgent / negative / unfinished calls trigger a Slack alert with the recording link.",
+        "height": 240,
+        "width": 560
+      },
+      "id": "d4e5f6a7-0051-4000-8000-000000000051",
+      "name": "Note: Reports",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        760,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## FLOW 3: Reminder calls (Mon-Fri 4 PM)\nFinds tomorrow's 'booked' appointments -> Vapi calls each customer with the Reminder assistant -> the customer confirms or cancels -> sheet + calendar updated. Only call people who booked and gave their number.",
+        "height": 220,
+        "width": 640
+      },
+      "id": "d4e5f6a7-0052-4000-8000-000000000052",
+      "name": "Note: Reminders",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        480,
+        1000
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## SETUP CHECKLIST\n1. Google Sheet with tabs 'Appointments' and 'Calls' (use the CSV templates)\n2. Credentials: Vapi Server Secret (Header Auth, name X-Vapi-Secret), Vapi API Key (Header Auth, Authorization: Bearer ...), Google Calendar, Google Sheets, OpenAI, Slack\n3. Edit 'Business Config' (name, timezone, hours)\n4. Replace YOUR_CALENDAR_ID, YOUR_GOOGLE_SHEET_ID, YOUR_SLACK_CHANNEL_ID, YOUR_REMINDER_ASSISTANT_ID, YOUR_VAPI_PHONE_NUMBER_ID\n5. Create the 2 assistants in Vapi (vapi-assistants.json), set their server URL to this webhook's PRODUCTION URL\n6. Activate the workflow, then call your Vapi number\n7. Set the Error Handler workflow in Settings -> Error workflow\n8. Do NOT enable 'Retry on fail' on Google Calendar create nodes",
+        "height": 520,
+        "width": 720
+      },
+      "id": "d4e5f6a7-0053-4000-8000-000000000053",
+      "name": "Note: Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -1000
+      ]
+    }
+  ],
+  "connections": {
+    "Vapi Webhook": {
+      "main": [
+        [
+          {
+            "node": "Business Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual: Run Reminders": {
+      "main": [
+        [
+          {
+            "node": "Business Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminders 4PM (Mon-Fri)": {
+      "main": [
+        [
+          {
+            "node": "Business Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Business Config": {
+      "main": [
+        [
+          {
+            "node": "From Vapi?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "From Vapi?": {
+      "main": [
+        [
+          {
+            "node": "Route by Message Type",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get Appointments (Sheet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Message Type": {
+      "main": [
+        [
+          {
+            "node": "Parse Tool Call",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond OK (report)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond OK (other)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Tool Call": {
+      "main": [
+        [
+          {
+            "node": "Which Tool?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which Tool?": {
+      "main": [
+        [
+          {
+            "node": "Compute Day Range",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Booking",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Find Booking (Sheet)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unknown Tool",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Day Range": {
+      "main": [
+        [
+          {
+            "node": "Get Calendar Events (day)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Calendar Events (day)": {
+      "main": [
+        [
+          {
+            "node": "Build Free Slots",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Booking": {
+      "main": [
+        [
+          {
+            "node": "Booking Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking Valid?": {
+      "main": [
+        [
+          {
+            "node": "Check Slot (Calendar)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Booking Invalid Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Slot (Calendar)": {
+      "main": [
+        [
+          {
+            "node": "Evaluate Slot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Evaluate Slot": {
+      "main": [
+        [
+          {
+            "node": "Slot Free?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slot Free?": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Slot Taken Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Log Appointment (Sheet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Appointment (Sheet)": {
+      "main": [
+        [
+          {
+            "node": "Booking Confirmation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Booking (Sheet)": {
+      "main": [
+        [
+          {
+            "node": "Prepare Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Update": {
+      "main": [
+        [
+          {
+            "node": "Booking Found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking Found?": {
+      "main": [
+        [
+          {
+            "node": "Is Cancel?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Not Found Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Cancel?": {
+      "main": [
+        [
+          {
+            "node": "Delete Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Confirmed (Sheet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete Calendar Event": {
+      "main": [
+        [
+          {
+            "node": "Mark Cancelled (Sheet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Cancelled (Sheet)": {
+      "main": [
+        [
+          {
+            "node": "Cancel Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Confirmed (Sheet)": {
+      "main": [
+        [
+          {
+            "node": "Confirm Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Free Slots": {
+      "main": [
+        [
+          {
+            "node": "Respond to Vapi (Tool Result)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking Invalid Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Vapi (Tool Result)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slot Taken Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Vapi (Tool Result)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Booking Confirmation": {
+      "main": [
+        [
+          {
+            "node": "Respond to Vapi (Tool Result)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not Found Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Vapi (Tool Result)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cancel Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Vapi (Tool Result)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirm Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Vapi (Tool Result)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unknown Tool": {
+      "main": [
+        [
+          {
+            "node": "Respond to Vapi (Tool Result)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond OK (report)": {
+      "main": [
+        [
+          {
+            "node": "Extract Call Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Call Data": {
+      "main": [
+        [
+          {
+            "node": "Has Transcript?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Transcript?": {
+      "main": [
+        [
+          {
+            "node": "AI: Analyze Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Model (Analyze)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI: Analyze Call",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI: Analyze Call": {
+      "main": [
+        [
+          {
+            "node": "Parse Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Analysis": {
+      "main": [
+        [
+          {
+            "node": "Log Call (Sheet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Call (Sheet)": {
+      "main": [
+        [
+          {
+            "node": "Needs Follow-up?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs Follow-up?": {
+      "main": [
+        [
+          {
+            "node": "Slack: Follow-up Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Appointments (Sheet)": {
+      "main": [
+        [
+          {
+            "node": "Select Tomorrow's Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Tomorrow's Bookings": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Bookings": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Vapi: Start Reminder Call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Vapi: Start Reminder Call": {
+      "main": [
+        [
+          {
+            "node": "Mark Reminded (Sheet)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Reminded (Sheet)": {
+      "main": [
+        [
+          {
+            "node": "Wait 30s",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 30s": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
