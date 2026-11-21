@@ -9,13 +9,14 @@ An AI voice receptionist built with **n8n + Vapi**. It answers phone calls 24/7,
 ## What it does
 
 **Flow 1: Inbound call (live)**
-Vapi handles the conversation (speech-to-text, LLM, text-to-speech). During the call it asks n8n to run three tools:
+Vapi handles the conversation (speech-to-text, LLM, text-to-speech). During the call it asks n8n to run four tools:
 
 | Tool | What n8n does |
 | --- | --- |
 | `check_availability` | Reads Google Calendar and returns free slots for a date |
 | `book_appointment` | Re-checks the slot, creates the calendar event, logs the booking in Google Sheets |
 | `update_appointment` | Confirms or cancels an existing booking |
+| `escalate_to_human` | Sends an instant Slack alert during the call when the caller asks for a human, is upset, reports an emergency, or the assistant failed twice. The assistant then takes a message and ends the call |
 
 Every tool answers Vapi with `{ "results": [{ "name", "toolCallId", "result" }] }`, and Vapi speaks the result to the caller. If Vapi re-sends the same tool call, the booking is not duplicated.
 
@@ -29,7 +30,7 @@ n8n finds tomorrow's `booked` appointments that have not been reminded yet, and 
 
 | File | Purpose |
 | --- | --- |
-| `ai-voice-agent-workflow.json` | The n8n workflow (53 nodes). Import with *Import from File* |
+| `ai-voice-agent-workflow.json` | The n8n workflow (56 nodes). Import with *Import from File* |
 | `vapi-assistants.json` | Templates for the two Vapi assistants (inbound receptionist and outbound reminder) |
 | `appointments-template.csv` | Headers for the `Appointments` tab |
 | `calls-template.csv` | Headers for the `Calls` tab |
@@ -63,7 +64,7 @@ n8n finds tomorrow's `booked` appointments that have not been reminded yet, and 
 - The assistant only states availability and confirmations that come from tool results, so it does not guess.
 - Slots are re-checked right before booking to avoid double bookings.
 - The webhook is protected with a secret header, so random requests are rejected.
-- Calls that need a human are flagged and sent to Slack, not left to fail silently.
+- Human escalation is judgment-based (set in the assistant prompt, not a keyword list or confidence score): an instant Slack alert during the call, plus a second AI pass on the transcript after the call. Calls are also capped at 10 minutes.
 - The assistant tells callers it is an AI virtual assistant.
 
 ## Known limitations
@@ -71,7 +72,7 @@ n8n finds tomorrow's `booked` appointments that have not been reminded yet, and 
 - Only the first tool call in each Vapi message is processed.
 - One calendar, and slots of a fixed length set in `Business Config`.
 - English voice and transcriber by default. Other languages need separate testing.
-- No live transfer to a human: the assistant takes a message, and the call is flagged for follow-up.
+- No live transfer to a human: the assistant takes a message, the team gets a Slack alert, and someone calls back.
 - Reminder calls need the customer's phone number in international format.
 
 ## Legal and privacy notes
@@ -88,3 +89,4 @@ Vapi, the voice provider, the LLM and your phone number are all billed by usage.
 - Multi-calendar and multi-location support
 - Rescheduling tool
 - SMS or email confirmation after booking
+
