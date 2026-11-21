@@ -260,6 +260,30 @@
               },
               "renameOutput": true,
               "outputKey": "update_appointment"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "s_escalate_to_human",
+                    "leftValue": "={{ $json.toolName }}",
+                    "rightValue": "escalate_to_human",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "escalate_to_human"
             }
           ]
         },
@@ -1315,7 +1339,7 @@
     },
     {
       "parameters": {
-        "content": "## FLOW 1: Live call tools\nVapi calls this webhook DURING the call.\n- check_availability: reads Google Calendar, returns free slots\n- book_appointment: re-checks the slot, creates the event, logs it in the sheet (safe if Vapi re-sends the same call)\n- update_appointment: confirm or cancel a booking\nEvery branch answers Vapi with { results: [ { name, toolCallId, result } ] }.",
+        "content": "## FLOW 1: Live call tools\nVapi calls this webhook DURING the call.\n- check_availability: reads Google Calendar, returns free slots\n- book_appointment: re-checks the slot, creates the event, logs it in the sheet (safe if Vapi re-sends the same call)\n- update_appointment: confirm or cancel a booking\n- escalate_to_human: instant Slack alert DURING the call (caller asked for a human, is upset, emergency, or the assistant failed twice); the assistant then takes a message and ends the call\nEvery branch answers Vapi with { results: [ { name, toolCallId, result } ] }.",
         "height": 300,
         "width": 600
       },
@@ -1371,6 +1395,63 @@
       "position": [
         0,
         -1000
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const a = $json.args || {};\nconst reason = String(a.reason || 'unspecified');\nreturn { json: {\n  toolCallId: $json.toolCallId, toolName: $json.toolName, callId: $json.callId,\n  reason, caller_name: String(a.name || '').trim(), phone: $json.callerNumber || '',\n  urgent: ['emergency', 'upset'].includes(reason)\n} };"
+      },
+      "id": "d4e5f6a7-0090-4000-8000-000000000090",
+      "name": "Prepare Escalation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "post",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "YOUR_SLACK_CHANNEL_ID",
+          "mode": "id"
+        },
+        "text": "=:rotating_light: *Caller needs a human* {{ $json.urgent ? '(URGENT)' : '' }}\nReason: {{ $json.reason }}\nCaller: {{ $json.caller_name || 'name not given' }} ({{ $json.phone || 'number hidden' }})\nCall ID: {{ $json.callId }}\nPlease call back as soon as possible.",
+        "otherOptions": {}
+      },
+      "id": "d4e5f6a7-0091-4000-8000-000000000091",
+      "name": "Slack: Human Needed (live)",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        1660,
+        300
+      ],
+      "credentials": {
+        "slackApi": {
+          "id": "REPLACE_ME",
+          "name": "Slack account"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const c = $('Prepare Escalation').first().json;\nlet result = 'A team member has been alerted and will call the caller back. Reassure the caller, confirm their name and number if not yet given, and end the call politely. Do not keep trying to help.';\nif (c.reason === 'emergency') result += ' If this is a medical emergency, tell the caller to contact local emergency services right away.';\nreturn { json: { toolCallId: c.toolCallId, toolName: c.toolName, result } };"
+      },
+      "id": "d4e5f6a7-0092-4000-8000-000000000092",
+      "name": "Escalation Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        300
       ]
     }
   ],
@@ -1492,6 +1573,13 @@
         [
           {
             "node": "Find Booking (Sheet)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Escalation",
             "type": "main",
             "index": 0
           }
@@ -1946,6 +2034,39 @@
         [
           {
             "node": "Loop Over Bookings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Escalation": {
+      "main": [
+        [
+          {
+            "node": "Slack: Human Needed (live)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack: Human Needed (live)": {
+      "main": [
+        [
+          {
+            "node": "Escalation Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation Result": {
+      "main": [
+        [
+          {
+            "node": "Respond to Vapi (Tool Result)",
             "type": "main",
             "index": 0
           }
